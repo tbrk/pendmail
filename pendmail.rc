@@ -1,0 +1,57 @@
+# pendmail
+# 2025-09-13 T.Bourke
+
+VERBOSE=no
+
+PATH=/bin:/usr/bin:/usr/local/bin
+MAILDIR=$HOME/mail
+
+DEFAULT=$MAILDIR/inbox/
+PENDING=$MAILDIR/pending/
+BACKUP=
+
+NOW=`date +%Y-%m-%dT%H:%M`
+PENDINGUNTIL=$1
+
+## Optionally backup
+:0 c:
+* ! $BACKUP ?? ^$
+$BACKUP
+
+## PENDING -> INBOX depending on date
+
+:0
+* $PENDINGUNTIL ?? ^$
+* ^X-Pending-Until:[ \t]*\/[^ \t].*
+* ? datetest -q "$MATCH" --le "$NOW"
+{
+    # strip pending header
+    :0 f
+    |formail -I "X-Pending-Until"
+
+    # deliver mail to inbox
+    :0:
+    $DEFAULT
+}
+
+# mail not delivered - return false
+:0
+* $PENDINGUNTIL ?? ^$
+{
+    :0
+    { EXITCODE=1 }
+
+    :0
+    /dev/null
+}
+
+## INBOX -> PENDING
+
+# add pending header
+:0 f
+|formail -I "X-Pending-Until: $PENDINGUNTIL"
+
+# deliver mail to pending box
+:0:
+$PENDING
+

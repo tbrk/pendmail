@@ -1,0 +1,187 @@
+#!/bin/sh
+
+# pendmail
+# 2025-09-13 T.Bourke
+
+VERBOSE=0
+ME="$(basename "$0")"
+
+log () {
+    if [ $VERBOSE -eq 1 ]; then
+        printf "%s: %s\n" "$ME" "$@"
+    fi
+}
+
+abort () {
+    1>&2 printf "%s aborting: %s\n" "$ME" "$@"
+    exit 1
+}
+
+# simple decoder for "MIME encoded-word syntax" (otherwise use perl or python)
+decode_mime()
+{
+    while IFS= read -r line
+    do
+	case "$(expr "$line" : "^ *=?[uU][tT][fF]-8?\([qQbB]\)?.*=$")" in
+	    q|Q)  printf " %b" "$(expr "$line" : "^ *=?[uU][tT][fF]-8?[qQ]?\(.*\)?=$" \
+		    | sed 's/_/ /g; s/=\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"
+		;;
+
+	    b|B)  printf " %s" "$(expr "$line" : "^ *=?[uU][tT][fF]-8?[bB]?\(.*\)?=$" \
+		    | base64 -d)"
+		;;
+
+	    *)  printf "%s" "$line"
+		;;
+	esac
+    done
+}
+
+check_date()
+{
+    if datetest --isvalid "$1"; then    # date without duration
+	DATE="$1"
+	DURA="+0d"
+    elif [ -n "$1" ]; then		    # duration only
+	DATE="$(date "+%Y-%m-%dT%H:%M")"
+	DURA="$1"
+    else				    # invalid
+	DATE=""
+	DURA=""
+    fi
+
+    if [ -n "$DATE" ] && [ -n "$DURA" ]; then
+	# shellcheck disable=SC2086
+	DATE="$(2>/dev/null dateadd --format="%Y-%m-%dT%H:%M" "$DATE" $DURA)"
+
+	if [ -n "$DATE" ]; then
+	    PENDING_UNTIL="$DATE"
+	    return 0
+	else
+	    return 1
+	fi
+    fi
+}
+
+## locate the pendmail.rc file
+PENDMAILRC=
+for f in "$HOME/.procmail" "$(dirname "$0")"
+do
+    log "trying $f"
+    if [ -f "$f/pendmail.rc" ]; then
+	PENDMAILRC="$f/pendmail.rc"
+	break
+    fi
+done
+if [ -z "$PENDMAILRC" ]; then
+    abort "cannot find pendmail.rc"
+fi
+
+# try to determine operating mode
+if [ -n "$PENDMAIL_MODE" ]; then
+    # mode specified in the environment
+    MODE="$PENDMAIL_MODE"
+elif [ -t 0 ]; then
+    # if input from terminal then check pending
+    MODE=checkpending
+else
+    # otherwise assume we must postpone a mail
+    MODE=sendpending
+fi
+
+PENDING_UNTIL="$PENDMAIL_PENDING_UNTIL"
+
+# command-line arguments
+while [ $# -gt 0 ]; do
+    log "argument: $1"
+    case "$1" in
+	--check)
+	    MODE=checkpending
+	    ;;
+	--source)
+	    MODE=source
+	    ;;
+	--sendpending)
+	    MODE=sendpending
+	    ;;
+	*)
+	    if ! check_date; then
+		abort "unknown argument '$1'"
+	    fi
+    esac
+    shift
+done
+
+log "mode=$MODE PENDING_UNTIL=$PENDING_UNTIL"
+
+if [ "$MODE" = "checkpending" ]; then
+    ## PENDING -> INBOX
+
+    # interpret the variable declarations in PENDMAILRC to determine PENDING
+    TMPFILE=$(mktemp -u -t "$(basename 0)") || exit 1
+    mkfifo -m 600 "$TMPFILE"
+    # shellcheck disable=SC2094
+    exec 3<>"$TMPFILE" 4<"$TMPFILE"
+    rm "$TMPFILE"
+    (>&3 grep '^[A-Z]*=' "$PENDMAILRC"; >&3 echo "echo \$PENDING") &
+    exec 3>&-
+    # shellcheck disable=SC1091
+    PENDING=$(sh /dev/fd/4)
+    exec 4>&-
+
+    # check destination directory
+    if [ -z "$PENDING" ]; then
+	abort "could not determine pending mailbox from $PENDMAILRC"
+    fi
+    PENDING=${PENDING%/}
+    if [ ! -d "$PENDING/new" ] || [ ! -d "$PENDING/cur" ]; then
+	abort "$PENDING is not in maildir format"
+    fi
+    log "PENDING=$PENDING"
+
+    # process mails and show results
+    find "$PENDING/cur" "$PENDING/new" -type f \
+    | while IFS= read -r f; do
+	log "CALLING PROCMAIL: $f"
+	SUBJECT="$(formail -x Subject < "$f" | decode_mime)"
+	if procmail -m "$PENDMAILRC" < "$f"; then
+	    DECISION="restored"
+	    rm "$f"
+	else
+	    DECISION="pending until$(formail -cx X-Pending-Until < "$f")"
+	fi
+	log "RESULT $DECISION $f"
+	printf "%s: %s%s\n" "$ME" "$DECISION" "$SUBJECT"
+    done
+
+elif [ "$MODE" = "sendpending" ] || [ "$MODE" = "source" ]; then
+    ## INBOX -> PENDING
+
+    ### interactively request the pending-until date
+
+    trap '1>&2 echo "NOT pending (remember to undelete!)"; exit 1' INT
+
+    if [ -z "$PENDING_UNTIL" ]; then
+	exec 3<>/dev/tty
+	while [ -z "$PENDING_UNTIL" ]; do
+	    >&3 echo "pending until?"
+	    <&3 IFS= read -r INPUT
+	    check_date "$INPUT"
+	done
+	>&3 echo "pending until: $PENDING_UNTIL"
+	exec 3<&-
+    fi
+
+    ## if output to another program then assume source from neomutt
+    if [ "$MODE" = "source" ]; then
+	echo "set my_pending_until='$PENDING_UNTIL'"
+	exit 0
+    fi
+
+    ### run procmail to place the mail(s) in pending
+
+    # prefix with "formail -s" to process an entire mbox file
+    log "procmail -m $PENDMAILRC $PENDING_UNTIL"
+    exec procmail -m "$PENDMAILRC" "$PENDING_UNTIL"
+fi
+
