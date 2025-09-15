@@ -5,7 +5,11 @@
 
 VERBOSE=0
 ME="$(basename "$0")"
-PRINTF=/usr/bin/printf
+
+PRINTF="printf"
+if [ "$("$PRINTF" "%b" "\xC0" | wc -c)" -eq 3 ]; then
+    PRINTF=/usr/bin/printf
+fi
 
 log () {
     if [ $VERBOSE -eq 1 ]; then
