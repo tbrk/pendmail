@@ -5,6 +5,7 @@
 
 VERBOSE=0
 ME="$(basename "$0")"
+PRINTF=/usr/bin/printf
 
 log () {
     if [ $VERBOSE -eq 1 ]; then
@@ -22,13 +23,17 @@ decode_mime()
 {
     while IFS= read -r line
     do
-	case "$(expr "$line" : "^ *=?[uU][tT][fF]-8?\([qQbB]\)?.*=$")" in
-	    q|Q)  printf " %b" "$(expr "$line" : "^ *=?[uU][tT][fF]-8?[qQ]?\(.*\)?=$" \
-		    | sed 's/_/ /g; s/=\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"
+	SRCENC="$(expr "$line" : "^ *=?\([^?][^?]*\)?[qQbB]?.*=$")"
+
+	case "$(expr "$line" : "^ *=?[^?][^?]*?\([qQbB]\)?.*=$")" in
+	    q|Q) "$PRINTF" "%b" "$(expr "$line" : "^ *=?[^?][^?]*?[qQ]?\(.*\)?=$" \
+		    | sed 's/_/ /g; s/=\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')" \
+		    | iconv -f "${SRCENC}" -t utf-8
 		;;
 
-	    b|B)  printf " %s" "$(expr "$line" : "^ *=?[uU][tT][fF]-8?[bB]?\(.*\)?=$" \
-		    | base64 -d)"
+	    b|B) "$PRINTF" "%s" "$(expr "$line" : "^ *=?[^?][^?]*?[bB]?\(.*\)?=$" \
+		    | base64 -d)" \
+		    | iconv -f "${SRCENC:-utf-8}" -t utf-8
 		;;
 
 	    *)  printf "%s" "$line"
@@ -154,7 +159,7 @@ if [ "$MODE" = "checkpending" ]; then
 	    DECISION="pending until$(formail -cx X-Pending-Until < "$f")"
 	fi
 	log "RESULT $DECISION $f"
-	printf "%s: %s%s\n" "$ME" "$DECISION" "$SUBJECT"
+	printf "%s: %s %s\n" "$ME" "$DECISION" "$SUBJECT"
     done
 
 elif [ "$MODE" = "sendpending" ] || [ "$MODE" = "source" ]; then
