@@ -13,6 +13,11 @@ Similar to:
 * Getting Things Done [defer mail](https://gettingthingsdone.com/wp-content/uploads/2014/10/GettingEmail.pdf)
 * Gmail [snooze](https://support.google.com/mail/answer/7622010?hl=en&co=GENIE.Platform%3DDesktop) feature
 
+Recommendations:
+* Test your initial configuration carefully on spam.
+* Use the NeoMutt [trash](https://neomutt.org/feature/trash) feature to 
+  backup mails as they are postponed.
+
 ## Requirements
 
 * [NeoMutt](https://neomutt.org) with local MailDirs
@@ -64,6 +69,10 @@ macro pager <esc>p \
 Known flaw: the NeoMutt macro always calls `<delete-message>` regardless of 
 whether the mails have been moved successfully or not. Use undelete if 
 unsure!
+
+The NeoMutt [trash](https://neomutt.org/feature/trash) feature can help to 
+save mails. On the other hand, every time a mail is made pending, a copy is 
+placed in the trash...
 
 Maybe this could be fixed by having `pendmail` update a file which is then 
 `source`d to either show a message or delete the mails? Or by having the 
