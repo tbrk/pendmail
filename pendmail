@@ -121,7 +121,7 @@ if [ "$MODE" = "checkpending" ]; then
     ## PENDING -> INBOX
 
     # interpret the variable declarations in PENDMAILRC to determine PENDING
-    TMPFILE=$(mktemp -u -t "$(basename 0)") || exit 1
+    TMPFILE=$(mktemp -u -t "$(basename 0)-XXXXXX") || exit 1
     mkfifo -m 600 "$TMPFILE"
     # shellcheck disable=SC2094
     exec 3<>"$TMPFILE" 4<"$TMPFILE"
