@@ -104,6 +104,9 @@ while [ $# -gt 0 ]; do
 	--sendpending)
 	    MODE=sendpending
 	    ;;
+	-v|--verbose)
+	    VERBOSE=yes
+	    ;;
 	*)
 	    if ! check_date; then
 		abort "unknown argument '$1'"
