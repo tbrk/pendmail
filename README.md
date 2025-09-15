@@ -20,9 +20,14 @@ Recommendations:
 
 ## Requirements
 
-* [NeoMutt](https://neomutt.org) with local MailDirs
+* [NeoMutt](https://neomutt.org)
 * [procmail](https://porkmail.org/era/procmail/quickref)
 * [dateutils](https://www.fresse.org/dateutils/)
+
+NB: the scripts are designed and tested to work with local mail in maildir 
+format, but all of the mailbox manipulation is done via `NeoMutt` and 
+`procmail`, so it should be readily adaptable — if you know how to work with 
+`procmail`... Patches welcome.
 
 ## Installation
 
