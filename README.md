@@ -69,7 +69,9 @@ macro pager <esc>p \
     'move mail to pending'
 ```
 
-## Design Notes
+## Flaws and Limitations
+
+### NeoMutt macros continue on failure
 
 Known flaw: the NeoMutt macro always calls `<delete-message>` regardless of 
 whether the mails have been moved successfully or not. Use undelete if 
@@ -82,6 +84,13 @@ placed in the trash...
 Maybe this could be fixed by having `pendmail` update a file which is then 
 `source`d to either show a message or delete the mails? Or by having the 
 procmail script reroute to the inbox if `$PENDINGUNTIL` is invalid?
+
+### Message status and flags are lost
+
+The message status (read or unread) and flags (important) are known to 
+NeoMutt (Mail User Agent) but not to `procmail` (Mail Delivery Agent).
+In the current design, they are thus lost during transfers to and from the 
+`postponed` mailbox.
 
 ## Bugs?
 
